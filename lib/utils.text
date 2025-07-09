@@ -1,0 +1,178 @@
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+import { subjectsColors, voices } from "@/constants";
+import { CreateAssistantDTO } from "@vapi-ai/web/dist/api";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+export const getSubjectColor = (subject: string) => {
+  return subjectsColors[subject as keyof typeof subjectsColors];
+};
+
+export const configureAssistant = (voice: string, style: string) => {
+  const voiceId = voices[voice as keyof typeof voices][
+          style as keyof (typeof voices)[keyof typeof voices]
+          ] || "sarah";
+
+  const vapiAssistant: CreateAssistantDTO = {
+    name: "Companion",
+    firstMessage:
+        "Hello, let's start the session. Today we'll be talking about {{topic}}.",
+    transcriber: {
+      provider: "deepgram",
+      model: "nova-3",
+      language: "en",
+    },
+    voice: {
+      provider: "11labs",
+      voiceId: voiceId,
+      stability: 0.4,
+      similarityBoost: 0.8,
+      speed: 1,
+      style: 0.5,
+      useSpeakerBoost: true,
+    },
+    model: {
+      provider: "openai",
+      model: "gpt-4",
+      messages: [
+        {
+          role: "system",
+          content: `You are a highly knowledgeable tutor teaching a real-time voice session with a student. Your goal is to teach the student about the topic and subject.
+
+                    Tutor Guidelines:
+                    Stick to the given topic - {{ topic }} and subject - {{ subject }} and teach the student about it.
+                    Keep the conversation flowing smoothly while maintaining control.
+                    From time to time make sure that the student is following you and understands you.
+                    Break down the topic into smaller parts and teach the student one part at a time.
+                    Keep your style of conversation {{ style }}.
+                    Keep your responses short, like in a real voice conversation.
+                    Do not include any special characters in your responses - this is a voice conversation.
+              `,
+        },
+      ],
+    },
+    clientMessages: [],
+    serverMessages: [],
+  };
+  return vapiAssistant;
+};
+
+
+
+///page my journey
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { currentUser } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
+import {
+  getUserCompanions,
+  getUserSessions,
+} from "@/lib/actions/companion.action";
+import Image from "next/image";
+import CompanionsList from "@/components/Companionlist";
+
+const MyJourneyPage = async () => {
+  const user = await currentUser();
+
+  if (!user) redirect("/sign-in");
+
+  const companions = await getUserCompanions(user.id);
+  const sessionHistory = await getUserSessions(user.id);
+
+  return (
+    <main className="min-lg:w-3/4">
+      <section className="flex justify-between gap-4 max-sm:flex-col items-center">
+        <div className="flex gap-4 items-center">
+          <Image
+            src={user.imageUrl}
+            alt={user.firstName!}
+            width={110}
+            height={110}
+          />
+          <div className="flex flex-col gap-2">
+            <h1 className="font-bold text-2xl">
+              {user.firstName} {user.lastName}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {user.emailAddresses[0].emailAddress}
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-4">
+          <div className="border border-black rounded-lg p-3 gap-2 flex flex-col h-fit">
+            <div className="flex gap-2 items-center">
+              <Image
+                src="/icons/check.svg"
+                alt="checkmark"
+                width={22}
+                height={22}
+              />
+              <p className="text-2xl font-bold">{sessionHistory.length}</p>
+            </div>
+            <div>Lessons completed</div>
+          </div>
+          <div className="border border-black rounded-lg p-3 gap-2 flex flex-col h-fit">
+            <div className="flex gap-2 items-center">
+              <Image src="/icons/cap.svg" alt="cap" width={22} height={22} />
+              <p className="text-2xl font-bold">{companions.length}</p>
+            </div>
+            <div>Companions created</div>
+          </div>
+        </div>
+      </section>
+      <Accordion type="multiple">
+        <AccordionItem value="recent">
+          <AccordionTrigger className="text-2xl font-bold">
+            Recent Sessions
+          </AccordionTrigger>
+          <AccordionContent>
+            <CompanionsList
+              title="Recent Sessions"
+              companions={sessionHistory}
+            />
+          </AccordionContent>
+        </AccordionItem>
+        <AccordionItem value="companions">
+          <AccordionTrigger className="text-2xl font-bold">
+            My Companions {`(${companions.length})`}
+          </AccordionTrigger>
+          <AccordionContent>
+            <CompanionsList title="My Companions" companions={companions} />
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+    </main>
+  );
+};
+
+export default MyJourneyPage;
+
+
+
+////
+import CompanionForm from '@/components/CompanionForm'
+import { auth } from '@clerk/nextjs/server'
+import { redirect } from 'next/navigation'
+
+const NewCompanionPage = async () => {
+  const { userId } = await auth();
+  
+  // Redirect to sign-in page if user is not authenticated
+  if (!userId) {
+    redirect('/sign-in');
+  }
+  
+  return (
+    <main className='flex justify-center items-cente min-lg:w-1/3 min-md:w 2/3 '>
+      <article className='companion-form w-full flex flex-col'>
+        <h1 className='text-3xl font-bold'>Build Companion</h1>
+      
+        <CompanionForm />
+      </article>
+    </main>
+  )
+}
+
+export default NewCompanionPage
